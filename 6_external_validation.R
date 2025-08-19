@@ -649,8 +649,6 @@ for (i in unique(final_kenya$hosp_id)) {
   row = row + 1
 }
 
-save(simpen, file = "simpen_DT_EV_before.Rda")
-
 store = data.frame(auc = 1, se = 1, slo = 1, slo_se = 1, int = 1, int_se=1,  cluster = "A")
 row = 1
 
