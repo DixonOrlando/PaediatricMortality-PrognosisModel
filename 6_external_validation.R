@@ -55,7 +55,7 @@ pre_final_kenya_data = pre_final_kenya_data %>%
 pre_final_kenya_data = pre_final_kenya_data %>%
   filter(age_final != max(pre_final_kenya_data$age_final, na.rm = T) | is.na(age_final))
 
-#Filter observations so it only contain those below 13 years old. n dropped = 593
+#Filter observations so it only contain those below 13 years old. 
 pre_final_kenya_data = pre_final_kenya_data %>%
   filter(age_final < 156 | is.na(age_final))
 
@@ -68,17 +68,17 @@ pre_final_kenya_data = pre_final_kenya_data %>%
   drop_na(age_final)
 
 
-#Censor the data after 7 days and filtering it to only include non-neonate.
+#Censor the data after 7 days.
 pre_final_kenya_data = pre_final_kenya_data %>% 
   mutate(outcome = if_else((AgeD >7 & outcome == "Died"), "Alive", outcome)) 
 
 pre_final_kenya_data = pre_final_kenya_data %>%
   filter(outcome != "Empty" & !is.na(outcome)) %>% #Removing those with either NA or EMPTY outcome.
-  filter(!(is.na(outcome_res) & outcome == "Alive")) %>% #Dropped n = 1,228
+  filter(!(is.na(outcome_res) & outcome == "Alive")) %>% 
   filter(!(outcome_res == "Empty" & outcome == "Alive"))
 
 #Deleting observations with negative AgeD value because we were not sure whether the date was swapped or if there was any error unknown to us.
-pre_final_kenya_data = pre_final_kenya_data %>% #Dropped n = 167
+pre_final_kenya_data = pre_final_kenya_data %>% 
   filter(AgeD >=0)
 
 
@@ -164,7 +164,7 @@ final_kenya_data = final_kenya_data %>%
     grunting == "Yes" | acidotic_breathing == "Yes" | stridor == "Yes" | (age2>60 & indrawing == "Yes") ~ 1,
     grunting == "No" & acidotic_breathing == "No" & stridor == "No" & !(age2>60 & indrawing == "Yes") ~ 0,
     TRUE ~ 9999
-  )) #Missingness is now 34,997
+  )) 
 
 
 #Q39PALLO2
@@ -359,76 +359,38 @@ for (i in unique(final_kenya$hosp_id)) {
 
 #After recalibration
 
+simpen = simpen %>%
+  mutate(raw_lp = log(.pred_1/(1-.pred_1)))
+
+logistic_recalibration = glm(Died ~ raw_lp, #Performing logistic recalibration.
+                             data = simpen,
+                             family = binomial())
+
+simpen = simpen %>%
+  mutate(.pred_1_recal = predict(logistic_recalibration, newdata = simpen, type = "response"))
+
+simpen = simpen %>%
+  mutate(raw_lp_recal = log(.pred_1_recal/(1-.pred_1_recal)))
+
 store = data.frame(auc = 1, se = 1, slo = 1, slo_se = 1, int = 1, int_se=1,  cluster = "A")
 row = 1
 
 for (i in unique(final_kenya$hosp_id)) {
   
-  #Performing recalibration
-  
-  final_kenya_filter = final_kenya %>%
+  simpen2 = simpen %>%
     filter(hosp_id == i)
   
-  set.seed(1111)
-  split = final_kenya_filter %>%
-    initial_split(strata = Died)
-  
-  train = training(split)
-  
-  test = testing(split)
-  
-  lasso_val = augment(lasso_fit, new_data = test)
-  
-  lasso_val = lasso_val %>%
-    mutate(raw_lp = log(.pred_1/(1-.pred_1)))
-  
-  logistic_recalibration = glm(Died ~ raw_lp,
-                               data = lasso_val,
-                               family = binomial())
-  
-  
-  #Validation process
-  lasso_val = augment(lasso_fit, new_data = train)
-  
-  lasso_val = lasso_val %>%
-    mutate(raw_lp = log(.pred_1/(1-.pred_1)))
-  
-  lasso_val = lasso_val %>%
-    mutate(.pred_1 = predict(logistic_recalibration, newdata = lasso_val, type = "response"))
-  
-  
-  lasso_val = lasso_val %>%
-    mutate(.pred_1 = ifelse(.pred_1 == 0, 1e-8, .pred_1),
-           .pred_1 = ifelse(.pred_1 == 1, 1 - 1e-8, .pred_1))
-  
-  lasso_val <- lasso_val %>%
-    mutate(raw_lp = log(.pred_1/(1-.pred_1)))
-  
-  if (i == "Kiambu Level 5 Hospital") {
-    simpen = lasso_val
-    
-    train_store = train
-  }
-  
-  if (i != "Kiambu Level 5 Hospital") {
-    simpen = simpen %>%
-      rbind(lasso_val)
-    
-    train_store = train_store %>%
-      rbind(train)
-  }
-  
-  slope_pc <- glm(factor(Died, levels = c("0","1")) ~ raw_lp, 
+  slope_pc <- glm(factor(Died, levels = c("0","1")) ~ raw_lp_recal, 
                   family = binomial, 
-                  data = lasso_val) 
+                  data = simpen2) 
   
   intercept_pc <- glm(factor(Died, levels = c("0","1")) ~ 1, 
-                      offset = raw_lp, 
+                      offset = raw_lp_recal, 
                       family = binomial,
-                      data = lasso_val)
+                      data = simpen2)
   
-  store[row,1] = pROC::roc(lasso_val$Died, lasso_val$.pred_1)$auc
-  store[row, 2] = sqrt(pROC::var(pROC::roc(lasso_val$Died, lasso_val$.pred_1)))
+  store[row,1] = pROC::roc(simpen2$Died, simpen2$.pred_1_recal)$auc
+  store[row, 2] = sqrt(pROC::var(pROC::roc(simpen2$Died, simpen2$.pred_1_recal)))
   store[row, 3] = coef(summary(slope_pc))[2,1]
   store[row, 4] = coef(summary(slope_pc))[2,2]
   store[row, 5] = coef(summary(intercept_pc))[1,1]
@@ -478,7 +440,7 @@ for (i in unique(final_kenya$hosp_id)) {
                       data = xgb_val)
   
   store[row,1] = pROC::roc(xgb_val$Died, xgb_val$.pred_1)$auc
-  store[row, 2] = sqrt(var(pROC::roc(xgb_val$Died, xgb_val$.pred_1)))
+  store[row, 2] = sqrt(pROC::var(pROC::roc(xgb_val$Died, xgb_val$.pred_1)))
   store[row, 3] = coef(summary(slope_pc))[2,1]
   store[row, 4] = coef(summary(slope_pc))[2,2]
   store[row, 5] = coef(summary(intercept_pc))[1,1]
@@ -489,76 +451,38 @@ for (i in unique(final_kenya$hosp_id)) {
 }
 
 #After recalibration
+simpen = simpen %>%
+  mutate(raw_lp = log(.pred_1/(1-.pred_1)))
+
+logistic_recalibration = glm(Died ~ raw_lp,
+                             data = simpen,
+                             family = binomial())
+
+simpen = simpen %>%
+  mutate(.pred_1_recal = predict(logistic_recalibration, newdata = simpen, type = "response")) #Performing logistic recalibration.
+
+simpen = simpen %>%
+  mutate(raw_lp_recal = log(.pred_1_recal/(1-.pred_1_recal)))
+
 store = data.frame(auc = 1, se = 1, slo = 1, slo_se = 1, int = 1, int_se=1,  cluster = "A")
 row = 1
 
 for (i in unique(final_kenya$hosp_id)) {
   
-  #Performing recalibration
-  
-  final_kenya_filter = final_kenya %>%
+  simpen2 = simpen %>%
     filter(hosp_id == i)
   
-  set.seed(1111)
-  split = final_kenya_filter %>%
-    initial_split(strata = Died)
-  
-  train = training(split)
-  
-  test = testing(split)
-  
-  xgb_val = augment(xgb_fit, new_data = test)
-  
-  xgb_val = xgb_val %>%
-    mutate(raw_lp = log(.pred_1/(1-.pred_1)))
-  
-  logistic_recalibration = glm(Died ~ raw_lp,
-                               data = xgb_val,
-                               family = binomial())
-  
-  
-  #Validation process
-  xgb_val = augment(xgb_fit, new_data = train)
-  
-  xgb_val = xgb_val %>%
-    mutate(raw_lp = log(.pred_1/(1-.pred_1)))
-  
-  xgb_val = xgb_val %>%
-    mutate(.pred_1 = predict(logistic_recalibration, newdata = xgb_val, type = "response"))
-  
-  
-  xgb_val = xgb_val %>%
-    mutate(.pred_1 = ifelse(.pred_1 == 0, 1e-8, .pred_1),
-           .pred_1 = ifelse(.pred_1 == 1, 1 - 1e-8, .pred_1))
-  
-  xgb_val <- xgb_val %>%
-    mutate(raw_lp = log(.pred_1/(1-.pred_1)))
-  
-  if (i == "Kiambu Level 5 Hospital") {
-    simpen = xgb_val
-    
-    train_store = train
-  }
-  
-  if (i != "Kiambu Level 5 Hospital") {
-    simpen = simpen %>%
-      rbind(xgb_val)
-    
-    train_store = train_store %>%
-      rbind(train)
-  }
-  
-  slope_pc <- glm(factor(Died, levels = c("0","1")) ~ raw_lp, 
+  slope_pc <- glm(factor(Died, levels = c("0","1")) ~ raw_lp_recal, 
                   family = binomial, 
-                  data = xgb_val) 
+                  data = simpen2) 
   
   intercept_pc <- glm(factor(Died, levels = c("0","1")) ~ 1, 
-                      offset = raw_lp, 
+                      offset = raw_lp_recal, 
                       family = binomial,
-                      data = xgb_val)
+                      data = simpen2)
   
-  store[row,1] = pROC::roc(xgb_val$Died, xgb_val$.pred_1)$auc
-  store[row, 2] = sqrt(pROC::var(pROC::roc(xgb_val$Died, xgb_val$.pred_1)))
+  store[row,1] = pROC::roc(simpen2$Died, simpen2$.pred_1_recal)$auc
+  store[row, 2] = sqrt(pROC::var(pROC::roc(simpen2$Died, simpen2$.pred_1_recal)))
   store[row, 3] = coef(summary(slope_pc))[2,1]
   store[row, 4] = coef(summary(slope_pc))[2,2]
   store[row, 5] = coef(summary(intercept_pc))[1,1]
@@ -567,6 +491,7 @@ for (i in unique(final_kenya$hosp_id)) {
   
   row = row + 1
 }
+
 
 ######Performing external validation for decision tree######
 
@@ -649,76 +574,40 @@ for (i in unique(final_kenya$hosp_id)) {
   row = row + 1
 }
 
+
+#After recalibration
+simpen = simpen %>%
+  mutate(raw_lp = log(.pred_1/(1-.pred_1)))
+
+logistic_recalibration = glm(Died ~ raw_lp,
+                             data = simpen,
+                             family = binomial())
+
+simpen = simpen %>% #Performing logistic recalibration
+  mutate(.pred_1_recal = predict(logistic_recalibration, newdata = simpen, type = "response"))
+
+simpen = simpen %>%
+  mutate(raw_lp_recal = log(.pred_1_recal/(1-.pred_1_recal)))
+
 store = data.frame(auc = 1, se = 1, slo = 1, slo_se = 1, int = 1, int_se=1,  cluster = "A")
 row = 1
 
-#After recalibration
 for (i in unique(final_kenya$hosp_id)) {
   
-  #Performing recalibration
-  
-  data2_filter = data2 %>%
+  simpen2 = simpen %>%
     filter(hosp_id == i)
   
-  set.seed(1111)
-  split = data2_filter %>%
-    initial_split(strata = Died)
-  
-  train = training(split)
-  
-  test = testing(split)
-  
-  tree_val = augment(tree_fit, new_data = test)
-  
-  tree_val = tree_val %>%
-    mutate(raw_lp = log(.pred_1/(1-.pred_1)))
-  
-  logistic_recalibration = glm(Died ~ raw_lp,
-                               data = tree_val,
-                               family = binomial())
-  
-  #Validation process
-  tree_val = augment(tree_fit, new_data = train)
-  
-  tree_val = tree_val %>%
-    mutate(raw_lp = log(.pred_1/(1-.pred_1)))
-  
-  tree_val = tree_val %>%
-    mutate(.pred_1 = predict(logistic_recalibration, newdata = tree_val, type = "response"))
-  
-  
-  tree_val = tree_val %>%
-    mutate(.pred_1 = ifelse(.pred_1 == 0, 1e-8, .pred_1),
-           .pred_1 = ifelse(.pred_1 == 1, 1 - 1e-8, .pred_1))
-  
-  tree_val <- tree_val %>%
-    mutate(raw_lp = log(.pred_1/(1-.pred_1)))
-  
-  if (i == "Kiambu Level 5 Hospital") {
-    simpen = tree_val
-    
-    train_store = train
-  }
-  
-  if (i != "Kiambu Level 5 Hospital") {
-    simpen = simpen %>%
-      rbind(tree_val)
-    
-    train_store = train_store %>%
-      rbind(train)
-  }
-  
-  slope_pc <- glm(factor(Died, levels = c("0","1")) ~ raw_lp, 
+  slope_pc <- glm(factor(Died, levels = c("0","1")) ~ raw_lp_recal, 
                   family = binomial, 
-                  data = tree_val) 
+                  data = simpen2) 
   
   intercept_pc <- glm(factor(Died, levels = c("0","1")) ~ 1, 
-                      offset = raw_lp, 
+                      offset = raw_lp_recal, 
                       family = binomial,
-                      data = tree_val)
+                      data = simpen2)
   
-  store[row,1] = pROC::roc(tree_val$Died, tree_val$.pred_1)$auc
-  store[row, 2] = sqrt(pROC::var(pROC::roc(tree_val$Died, tree_val$.pred_1)))
+  store[row,1] = pROC::roc(simpen2$Died, simpen2$.pred_1_recal)$auc
+  store[row, 2] = sqrt(pROC::var(pROC::roc(simpen2$Died, simpen2$.pred_1_recal)))
   store[row, 3] = coef(summary(slope_pc))[2,1]
   store[row, 4] = coef(summary(slope_pc))[2,2]
   store[row, 5] = coef(summary(intercept_pc))[1,1]
@@ -731,10 +620,9 @@ for (i in unique(final_kenya$hosp_id)) {
 
 ######Perfoming analyses for all the results of external validation######
 
-fk = final_kenya #Run this for analyses of prior recalibration.
-fk = train_store #Run this for analyses of after recalibration.
+fk = final_kenya 
 
-#Forest plot for C-statistic.
+#Forest plot for C-statistic (can be used for both prior and after recalibration).
 forest(metagen(TE = auc,
                seTE = se,
                studlab = cluster,
@@ -757,7 +645,7 @@ forest(metagen(TE = auc,
        leftlabs = c("Hospital ID", "No. of deaths", "Sample Size"),
        xlim = c(0.6,0.9))
 
-#Forest plot for calibration slope.
+#Forest plot for calibration slop (can be used for both prior and after recalibration).
 forest(metagen(TE = slo,
                seTE = slo_se,
                studlab = cluster,
@@ -780,7 +668,7 @@ forest(metagen(TE = slo,
        leftlabs = c("Hospital ID", "No. of deaths", "Sample Size"),
        xlim = c(0.5,1.5))
 
-#Forst plot for calibration intercept.
+#Forst plot for calibration intercept (can be used for both prior and after recalibration).
 forest(metagen(TE = int,
                seTE = int_se,
                studlab = cluster,
@@ -803,11 +691,54 @@ forest(metagen(TE = int,
        leftlabs = c("Hospital ID", "No. of deaths", "Sample Size"),
        xlim = c(-0.5,0.5))
 
-#Forest plot for O/E ratio.
+#Forest plot for O/E ratio (this is for prior recalibration).
 O_E = simpen %>% 
   dplyr::group_by(hosp_id) %>% 
   dplyr::summarize(O = sum(as.numeric(as.character(Died))), E = sum(.pred_1)) %>% mutate(O_E = O/E) %>%
   left_join(simpen %>%
+              mutate(mult = .pred_1*(1-.pred_1)) %>%
+              select(mult, hosp_id) %>%
+              dplyr::group_by(hosp_id) %>%
+              dplyr::summarize(mult = sum(mult)),
+            by = c("hosp_id" = "hosp_id"))
+
+O_E = O_E %>%
+  mutate(sd = 1/E * sqrt(mult))
+
+O_E = O_E %>%
+  mutate(hosp_id = factor(hosp_id, levels = store$cluster)) %>%
+  arrange(hosp_id)
+
+forest(metagen(TE = O_E,
+               seTE = sd,
+               studlab = hosp_id,
+               data =  O_E %>%
+                 left_join(fk %>% count(hosp_id) %>% rename("SampleSize" = "n"), by = c("hosp_id" = "hosp_id")) %>% 
+                 left_join(fk %>% count(hosp_id, Died) %>% filter(Died == "1") %>% rename("Events" = "n"), , by = c("hosp_id" = "hosp_id")),
+               prediction = F, 
+               method.random.ci = "HK",
+               method.predict = "HK",
+               n.e = Events,
+               n.c = SampleSize,
+               label.e = "",
+               label.c = "",
+               common = F,
+               text.random = "Random-effects pooled estimate"),
+       pooled.totals = F,
+       right.cols = c("effect", "ci", "w.random"),
+       rightlabs = c("O/E ratio", "95% CI", "Weight"),
+       leftcols = c("studlab", "n.e", "n.c"),
+       leftlabs = c("Hospital ID", "No. of deaths", "Sample Size"),
+       ref = 1,
+       xlim = c(0, 2))
+
+#Forest plot for O/E ratio (this is for after recalibration).
+O_E = simpen %>% 
+  mutate(.pred_1 = .pred_1_recal) %>%
+  dplyr::group_by(hosp_id) %>% 
+  dplyr::summarize(O = sum(as.numeric(as.character(Died))), E = sum(.pred_1)) %>% mutate(O_E = O/E) %>%
+  left_join(simpen %>%
+              mutate(.pred_1 = .pred_1_recal) %>%
               mutate(mult = .pred_1*(1-.pred_1)) %>%
               select(mult, hosp_id) %>%
               dplyr::group_by(hosp_id) %>%
