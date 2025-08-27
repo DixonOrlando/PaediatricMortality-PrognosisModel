@@ -779,7 +779,7 @@ forest(metagen(TE = O_E,
 ###Decision curve analysis###
 dca(Died ~ .pred_1, 
     data = simpen,
-    thresholds = seq(0, 0.2, 0.01)) %>%
+    thresholds = seq(0, 0.4, 0.01)) %>%
   plot()
 
 
@@ -865,6 +865,7 @@ dca(Died ~ `SpO2<80&Coma` + `SpO2<85&Coma` + `SpO2<90&Coma`,
            xmin = 0, xmax = 0.2,   # x-range to shade
            ymin = -Inf, ymax = Inf,  # entire y-axis
            alpha = 0.2, fill = "darkgrey")
+
 
 
 
