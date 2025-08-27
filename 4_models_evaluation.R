@@ -252,7 +252,7 @@ ggplot(simpen, aes(x = .pred_1)) +
 dca(Died ~ .pred_1, 
     data = simpen %>%
       dplyr::mutate(Died = factor(Died, levels = c("0", "1"))),
-    thresholds = seq(0, 0.20, 0.01)) %>%
+    thresholds = seq(0, 0.40, 0.01)) %>%
   plot(smooth = T)
 
 
@@ -337,5 +337,6 @@ dca(Died ~ `SpO2<80&Coma` + `SpO2<85&Coma` + `SpO2<90&Coma`,
            xmin = 0, xmax = 0.2,   # x-range to shade
            ymin = -Inf, ymax = Inf,  # entire y-axis
            alpha = 0.2, fill = "darkgrey")
+
 
 
