@@ -188,7 +188,7 @@ final_child = final_child %>%
 
 ###########PREPARATION FOR MICE IMPUTATION###########################
 
-####GETTING NON-LINEARITY###
+####ASSESSING NON-LINEARITY###
 
 results = data.frame(var1 = "A", p_val = 1, var2 = "B")
 row = 1
@@ -395,7 +395,7 @@ mice_imp <- function(train, test, id) {
   
   pred <- imp$predictorMatrix
   
-  pred[pred == 1] <- 1 # Accounts for between-study heterogeneity in the effect of all variables; 2 actually implies a random effect.
+  pred[pred == 1] <- 1 
   
   pred[, "Q52SP02P_sq"] = 0
   pred["Q52SP02P_sq", "Q52SP02P"] = 0
@@ -427,9 +427,10 @@ mice_imp <- function(train, test, id) {
   
   meth <- imp$method
   
-  meth[meth == "pmm"] <- "2l.pmm" # Multi-level predictive mean matching for continuous variables
+  # Multi-level predictive mean matching for all variables.
+  meth[meth == "pmm"] <- "2l.pmm" 
   
-  meth[meth == "logreg"] <- "2l.pmm" # Multi-level logistic regression for binary variables
+  meth[meth == "logreg"] <- "2l.pmm" 
   
   meth["Q52SP02P_sq"] <- "~ I(Q52SP02P^2)"
   meth["Q50HEART_sq"] <- "~ I(Q50HEART^2)"
