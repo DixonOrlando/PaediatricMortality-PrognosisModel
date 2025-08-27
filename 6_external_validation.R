@@ -458,6 +458,7 @@ logistic_recalibration = glm(Died ~ raw_lp,
                              data = simpen,
                              family = binomial())
 
+
 simpen = simpen %>%
   mutate(.pred_1_recal = predict(logistic_recalibration, newdata = simpen, type = "response")) #Performing logistic recalibration.
 
@@ -775,7 +776,7 @@ forest(metagen(TE = O_E,
        ref = 1,
        xlim = c(0, 2))
 
-#Decision curve analysis.
+###Decision curve analysis###
 dca(Died ~ .pred_1, 
     data = simpen,
     thresholds = seq(0, 0.2, 0.01)) %>%
@@ -783,6 +784,87 @@ dca(Died ~ .pred_1,
 
 
 
+###Decision curve analysis for SpO2 by itself or in combination with coma###
+
+final_kenya = final_kenya %>%
+  mutate(`SpO2<90` = if_else(Q52SP02P < 90, 1, 0),
+         `SpO2<85` = if_else(Q52SP02P < 85, 1, 0),
+         `SpO2<80` = if_else(Q52SP02P < 80, 1, 0),
+         `SpO2<80&Coma` = if_else(Q52SP02P < 80 | Q45COMA2 == 1, 1, 0),
+         `SpO2<85&Coma` = if_else(Q52SP02P < 85 | Q45COMA2 == 1, 1, 0),
+         `SpO2<90&Coma` = if_else(Q52SP02P < 90 | Q45COMA2 == 1, 1, 0)) 
+
+#SpO2 only.
+dca(Died ~ `SpO2<80` + `SpO2<85` + `SpO2<90`, 
+    data = final_kenya %>%
+      mutate(Died = factor(Died, levels = c("0", "1"))),
+    thresholds = seq(0, 0.4, 0.01)) %>%
+  as_tibble() %>%
+  dplyr::filter(!is.na(net_benefit)) %>%
+  mutate(cat = case_when(
+    label %in% c("Treat All", "Treat None") ~ "Default",
+    !(label %in% c("Treat All", "Treat None")) ~ "Individual"
+  )) %>%
+  ggplot(aes(x = threshold, y = net_benefit, color = label, linetype = cat)) +
+  stat_smooth(method = "loess", 
+              se = FALSE, 
+              formula = "y ~ x", 
+              span = 0.2) +
+  coord_cartesian(ylim = c(-0.01, 0.04)) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(x = "Threshold Probability", y = "Net Benefit", color = "labels") +
+  theme_bw() +
+  guides(linetype = "none") +
+  scale_color_manual(values = c("SpO2<80" = "#00CD66", 
+                                "SpO2<85" = "#FFFF00",
+                                "SpO2<90" = "#CD853F",
+                                "Treat All" = "#D02090",
+                                "Treat None" = "#FF0000")) +
+  theme(legend.title = element_blank()) +
+  annotate("rect",
+           xmin = 0, xmax = 0.2,   # x-range to shade
+           ymin = -Inf, ymax = Inf,  # entire y-axis
+           alpha = 0.2, fill = "darkgrey")
+
+#Spo2 and coma
+
+dca(Died ~ `SpO2<80&Coma` + `SpO2<85&Coma` + `SpO2<90&Coma`, 
+    data = final_kenya %>%
+      mutate(Died = factor(Died, levels = c("0", "1"))),
+    thresholds = seq(0, 0.4, 0.01)) %>%
+  as_tibble() %>%
+  dplyr::filter(!is.na(net_benefit)) %>%
+  mutate(cat = case_when(
+    label %in% c("XGB", "LR", "DT") ~ "Model",
+    !(label %in% c("XGB", "LR", "DT")) & !(label %in% c("Treat All", "Treat None")) ~ "Individual",
+    label %in% c("Treat All", "Treat None") ~ "Default"
+  )) %>%
+  ggplot(aes(x = threshold, y = net_benefit, color = label, linetype = cat)) +
+  stat_smooth(method = "loess", 
+              se = FALSE, 
+              formula = "y ~ x", 
+              span = 0.2) +
+  coord_cartesian(ylim = c(-0.01, 0.04)) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(x = "Threshold Probability", y = "Net Benefit", color = "labels") +
+  theme_bw() +
+  guides(linetype = "none") +
+  scale_color_manual(values = c(
+    "SpO2<80&Coma" = "#00CD66",
+    "SpO2<85&Coma" = "#FFFF00",
+    "SpO2<90&Coma" = "#CD853F",
+    "Treat All" = "#D02090",
+    "Treat None" = "#FF0000")) +
+  scale_linetype_manual(values = c(
+    "Model" = "solid",
+    "Individual" = "dashed",
+    "Default" = "solid"
+  )) +
+  theme(legend.title = element_blank()) +
+  annotate("rect",
+           xmin = 0, xmax = 0.2,   # x-range to shade
+           ymin = -Inf, ymax = Inf,  # entire y-axis
+           alpha = 0.2, fill = "darkgrey")
 
 
 
