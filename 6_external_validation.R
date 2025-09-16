@@ -271,7 +271,7 @@ final_kenya = final_kenya_data %>%
 
 ######Perfoming case-mix check######
 
-final_child = read_csv("final_child.csv")
+final_child = read_csv("final_child.csv") #Getting the Nigerian dataset.
 
 #Building membership model
 
@@ -776,23 +776,150 @@ forest(metagen(TE = O_E,
        ref = 1,
        xlim = c(0, 2))
 
+#Brier score prior to recalibration
+simpen %>%
+  mutate(Died = factor(Died, levels = c("1", "0"))) %>%
+  brier_class(Died, .pred_1)
+
+
+#Brier score after recalibration
+simpen %>%
+  mutate(Died = factor(Died, levels = c("1", "0"))) %>%
+  brier_class(Died, .pred_1_recal)
+
 ###Decision curve analysis###
-dca(Died ~ .pred_1, 
-    data = simpen,
+
+#Compiling all the results prior to recalibration for decision curve analysis
+load("simpen_xgb_EV_before.Rda", verbose = T) #Saved external validation results for simplified XGBoost (sXGB)
+simpen_combine_before = simpen
+
+load("simpen_LR_EV_before.Rda") #Saved external validation results for simplified lasso logistic regression (sLR)
+simpen_combine_before = simpen_combine_before %>%
+  mutate(sLR = simpen$.pred_1)
+
+load("simpen_DT_EV_before.Rda") #Saved external validation results for decision tree
+simpen_combine_before = simpen_combine_before %>%
+  mutate(DT = simpen$.pred_1)
+
+simpen_combine_before = simpen_combine_before %>%
+  rename(c(sXGB = ".pred_1"))
+
+simpen_combine_before = simpen_combine_before %>%
+  mutate(`SpO2<80_OR_Coma` = if_else(Q52SP02P < 80 | Q45COMA2 == 1, 1, 0),
+         `SpO2<85_OR_Coma` = if_else(Q52SP02P < 85 | Q45COMA2 == 1, 1, 0),
+         `SpO2<90_OR_Coma` = if_else(Q52SP02P < 90 | Q45COMA2 == 1, 1, 0))
+
+#Decision curve analysis for results prior to recalibration
+dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO2<90_OR_Coma`, 
+    data = simpen_combine_before,
     thresholds = seq(0, 0.4, 0.01)) %>%
-  plot()
+  as_tibble() %>%
+  dplyr::filter(!is.na(net_benefit)) %>%
+  mutate(cat = case_when(
+    label %in% c("sXGB", "sLR", "DT") ~ "Model",
+    !(label %in% c("sXGB", "sLR", "DT")) & !(label %in% c("Treat All", "Treat None")) ~ "Individual",
+    label %in% c("Treat All", "Treat None") ~ "Default"
+  )) %>%
+  ggplot(aes(x = threshold, y = net_benefit, color = label, linetype = cat)) +
+  stat_smooth(method = "loess", 
+              se = FALSE, 
+              formula = "y ~ x", 
+              span = 0.2) +
+  coord_cartesian(ylim = c(-0.01, 0.05774028)) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(x = "Threshold Probability", y = "Net Benefit", color = "labels") +
+  theme_bw() +
+  guides(linetype = "none") +
+  scale_color_manual(values = c("sXGB" = "#117733", 
+                                "sLR" = "#DDCC77",
+                                "DT" = "#D55E00",
+                                "SpO2<80_OR_Coma" = "#030303",
+                                "SpO2<85_OR_Coma" = "#888888",
+                                "SpO2<90_OR_Coma" = "#661100",
+                                "Treat All" = "#CC79A7",
+                                "Treat None" = "#332288")) +
+  scale_linetype_manual(values = c(
+    "Model" = "solid",
+    "Individual" = "dashed",
+    "Default" = "solid"
+  )) +
+  theme(legend.title = element_blank()) +
+  annotate("rect",
+           xmin = 0.05, xmax = 0.2,   # x-range to shade
+           ymin = -Inf, ymax = Inf,  # entire y-axis
+           alpha = 0.2, fill = "lightblue")
 
 
+#Compiling all the results after recalibration for decision curve analysis
+load("XGB_after_onemodel.Rda", verbose = T) #Saved external validation results for simplified XGBoost (sXGB)
+simpen_combine_after = simpen
 
-###Decision curve analysis for SpO2 by itself or in combination with coma###
+load("LR_after_onemodel.Rda", verbose = T) #Saved external validation results for simplified lasso logistic regression (sLR)
+simpen_combine_after = simpen_combine_after %>%
+  mutate(sLR = simpen$.pred_1_recal)
+
+load("DT_after_onemodel.Rda", verbose = T) #Saved external validation results for decision tree.
+simpen_combine_after = simpen_combine_after %>%
+  mutate(DT = simpen$.pred_1_recal)
+
+simpen_combine_after = simpen_combine_after %>%
+  rename(c(sXGB = ".pred_1_recal"))
+
+simpen_combine_after = simpen_combine_after %>%
+  mutate(`SpO2<80_OR_Coma` = if_else(Q52SP02P < 80 | Q45COMA2 == 1, 1, 0),
+         `SpO2<85_OR_Coma` = if_else(Q52SP02P < 85 | Q45COMA2 == 1, 1, 0),
+         `SpO2<90_OR_Coma` = if_else(Q52SP02P < 90 | Q45COMA2 == 1, 1, 0))
+
+
+#Decision curve analysis for results after recalibration
+dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO2<90_OR_Coma`, 
+    data = simpen_combine_after,
+    thresholds = seq(0, 0.4, 0.01)) %>%
+  as_tibble() %>%
+  dplyr::filter(!is.na(net_benefit)) %>%
+  mutate(cat = case_when(
+    label %in% c("sXGB", "sLR", "DT") ~ "Model",
+    !(label %in% c("sXGB", "sLR", "DT")) & !(label %in% c("Treat All", "Treat None")) ~ "Individual",
+    label %in% c("Treat All", "Treat None") ~ "Default"
+  )) %>%
+  ggplot(aes(x = threshold, y = net_benefit, color = label, linetype = cat)) +
+  stat_smooth(method = "loess", 
+              se = FALSE, 
+              formula = "y ~ x", 
+              span = 0.2) +
+  coord_cartesian(ylim = c(-0.01, 0.05774028)) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(x = "Threshold Probability", y = "Net Benefit", color = "labels") +
+  theme_bw() +
+  guides(linetype = "none") +
+  scale_color_manual(values = c("sXGB" = "#117733", 
+                                "sLR" = "#DDCC77",
+                                "DT" = "#D55E00",
+                                "SpO2<80_OR_Coma" = "#030303",
+                                "SpO2<85_OR_Coma" = "#888888",
+                                "SpO2<90_OR_Coma" = "#661100",
+                                "Treat All" = "#CC79A7",
+                                "Treat None" = "#332288")) +
+  scale_linetype_manual(values = c(
+    "Model" = "solid",
+    "Individual" = "dashed",
+    "Default" = "solid"
+  )) +
+  theme(legend.title = element_blank()) +
+  annotate("rect",
+           xmin = 0.05, xmax = 0.2,   # x-range to shade
+           ymin = -Inf, ymax = Inf,  # entire y-axis
+           alpha = 0.2, fill = "lightblue")
+
+#Decision curve analysis for SpO2 by itself#
 
 final_kenya = final_kenya %>%
   mutate(`SpO2<90` = if_else(Q52SP02P < 90, 1, 0),
          `SpO2<85` = if_else(Q52SP02P < 85, 1, 0),
          `SpO2<80` = if_else(Q52SP02P < 80, 1, 0),
-         `SpO2<80&Coma` = if_else(Q52SP02P < 80 | Q45COMA2 == 1, 1, 0),
-         `SpO2<85&Coma` = if_else(Q52SP02P < 85 | Q45COMA2 == 1, 1, 0),
-         `SpO2<90&Coma` = if_else(Q52SP02P < 90 | Q45COMA2 == 1, 1, 0)) 
+         `SpO2<80_OR_Coma` = if_else(Q52SP02P < 80 | Q45COMA2 == 1, 1, 0),
+         `SpO2<85_OR_Coma` = if_else(Q52SP02P < 85 | Q45COMA2 == 1, 1, 0),
+         `SpO2<90_OR_Coma` = if_else(Q52SP02P < 90 | Q45COMA2 == 1, 1, 0)) 
 
 #SpO2 only.
 dca(Died ~ `SpO2<80` + `SpO2<85` + `SpO2<90`, 
@@ -815,28 +942,126 @@ dca(Died ~ `SpO2<80` + `SpO2<85` + `SpO2<90`,
   labs(x = "Threshold Probability", y = "Net Benefit", color = "labels") +
   theme_bw() +
   guides(linetype = "none") +
-  scale_color_manual(values = c("SpO2<80" = "#00CD66", 
-                                "SpO2<85" = "#FFFF00",
-                                "SpO2<90" = "#CD853F",
-                                "Treat All" = "#D02090",
-                                "Treat None" = "#FF0000")) +
+  scale_color_manual(values = c("SpO2<80" = "#030303", 
+                                "SpO2<85" = "#888888",
+                                "SpO2<90" = "#661100",
+                                "Treat All" = "#CC79A7",
+                                "Treat None" = "#332288")) +
   theme(legend.title = element_blank()) +
   annotate("rect",
            xmin = 0, xmax = 0.2,   # x-range to shade
            ymin = -Inf, ymax = Inf,  # entire y-axis
-           alpha = 0.2, fill = "darkgrey")
+           alpha = 0.2, fill = "lightblue")
 
-#Spo2 and coma
 
-dca(Died ~ `SpO2<80&Coma` + `SpO2<85&Coma` + `SpO2<90&Coma`, 
-    data = final_kenya %>%
-      mutate(Died = factor(Died, levels = c("0", "1"))),
-    thresholds = seq(0, 0.4, 0.01)) %>%
+######Subgroup analysis based on Sex######
+###Prior recalibration###
+#Load as needed
+load("simpen_xgb_EV_before.Rda", verbose = T) #For sXGBoost
+load("simpen_LR_EV_before.Rda", verbose = T) #For sLR
+load("simpen_DT_EV_before.Rda", verbose = T) #For DT
+
+#This loop would print out the C-statistic, calibration slope, calibration intercept, and O/E ratio for each subgroup.
+for (i in c("Female", "Male")) {
+  print(i)
+  
+  dat = simpen %>%
+    filter(child_sex == i) %>%
+    mutate(Died = factor(Died, levels = c("0", "1")))
+  
+  #C-stat
+  c_se = sqrt(pROC::var(pROC::roc(dat$Died, dat$.pred_1)))
+  print("C-stat")
+  print(pROC::roc(dat$Died, dat$.pred_1)$auc)
+  print(pROC::roc(dat$Died, dat$.pred_1)$auc - 1.96 * c_se)
+  print(pROC::roc(dat$Died, dat$.pred_1)$auc + 1.96 * c_se)
+  
+  
+  
+  #Calibration slope
+  slope_pc <- glm(factor(Died, levels = c("0","1")) ~ raw_lp, 
+                  family = binomial, 
+                  data = dat)
+  
+  
+  print("CS")
+  print(coef(summary(slope_pc))[2,1])
+  print(coef(summary(slope_pc))[2,1] - 1.96 * coef(summary(slope_pc))[2,2])
+  print(coef(summary(slope_pc))[2,1] + 1.96 * coef(summary(slope_pc))[2,2])
+  
+  
+  #Calibration intercept
+  
+  intercept_pc <- glm(factor(Died, levels = c("0","1")) ~ 1, 
+                      offset = raw_lp, 
+                      family = binomial,
+                      data = dat)
+  
+  print("CI") 
+  print(coef(summary(slope_pc))[2,1])
+  print(coef(summary(slope_pc))[2,1] - 1.96 * coef(summary(slope_pc))[2,2])
+  print(coef(summary(slope_pc))[2,1] + 1.96 * coef(summary(slope_pc))[2,2])
+  
+  #O/E ratio
+  dat = dat %>%
+    mutate(mult = .pred_1*(1-.pred_1))
+  
+  O = sum(as.numeric(as.character(dat$Died)))
+  E = sum(dat$.pred_1)
+  O_E = O/E
+  mult = sum(dat$mult)
+  sd = (1/E) * sqrt(mult)
+  
+  
+  print("O/E")
+  print(O_E)
+  print(O_E - 1.96*sd)
+  print(O_E + 1.96*sd)
+  
+}
+
+#Brier Class for female
+simpen %>%
+  filter(child_sex == "Female") %>%
+  mutate(Died = factor(Died, levels = c("1", "0"))) %>%
+  brier_class(Died, .pred_1)
+
+#Brier Class for male
+simpen %>%
+  filter(child_sex == "Male") %>%
+  mutate(Died = factor(Died, levels = c("1", "0"))) %>%
+  brier_class(Died, .pred_1)
+
+#Compiling all the results for decision curve analysis
+load("simpen_xgb_EV_before.Rda", verbose = T) #sXGB
+simpen_combine_before = simpen
+
+load("simpen_LR_EV_before.Rda") #sLR
+simpen_combine_before = simpen_combine_before %>%
+  mutate(sLR = simpen$.pred_1)
+
+load("simpen_DT_EV_before.Rda") #DT
+simpen_combine_before = simpen_combine_before %>%
+  mutate(DT = simpen$.pred_1)
+
+simpen_combine_before = simpen_combine_before %>%
+  rename(c(sXGB = ".pred_1"))
+
+simpen_combine_before = simpen_combine_before %>%
+  mutate(`SpO2<80_OR_Coma` = if_else(Q52SP02P < 80 | Q45COMA2 == 1, 1, 0),
+         `SpO2<85_OR_Coma` = if_else(Q52SP02P < 85 | Q45COMA2 == 1, 1, 0),
+         `SpO2<90_OR_Coma` = if_else(Q52SP02P < 90 | Q45COMA2 == 1, 1, 0))
+
+#Decision curve analysis for female
+fem = dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO2<90_OR_Coma`, 
+          data = simpen_combine_before %>%
+            filter(child_sex == "Female"),
+          thresholds = seq(0, 0.4, 0.01)) %>%
   as_tibble() %>%
   dplyr::filter(!is.na(net_benefit)) %>%
   mutate(cat = case_when(
-    label %in% c("XGB", "LR", "DT") ~ "Model",
-    !(label %in% c("XGB", "LR", "DT")) & !(label %in% c("Treat All", "Treat None")) ~ "Individual",
+    label %in% c("sXGB", "sLR", "DT") ~ "Model",
+    !(label %in% c("sXGB", "sLR", "DT")) & !(label %in% c("Treat All", "Treat None")) ~ "Individual",
     label %in% c("Treat All", "Treat None") ~ "Default"
   )) %>%
   ggplot(aes(x = threshold, y = net_benefit, color = label, linetype = cat)) +
@@ -844,17 +1069,19 @@ dca(Died ~ `SpO2<80&Coma` + `SpO2<85&Coma` + `SpO2<90&Coma`,
               se = FALSE, 
               formula = "y ~ x", 
               span = 0.2) +
-  coord_cartesian(ylim = c(-0.01, 0.04)) +
+  coord_cartesian(ylim = c(-0.01, 0.05774028)) +
   scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
   labs(x = "Threshold Probability", y = "Net Benefit", color = "labels") +
   theme_bw() +
   guides(linetype = "none") +
-  scale_color_manual(values = c(
-    "SpO2<80&Coma" = "#00CD66",
-    "SpO2<85&Coma" = "#FFFF00",
-    "SpO2<90&Coma" = "#CD853F",
-    "Treat All" = "#D02090",
-    "Treat None" = "#FF0000")) +
+  scale_color_manual(values = c("sXGB" = "#117733", 
+                                "sLR" = "#DDCC77",
+                                "DT" = "#D55E00",
+                                "SpO2<80_OR_Coma" = "#030303",
+                                "SpO2<85_OR_Coma" = "#888888",
+                                "SpO2<90_OR_Coma" = "#661100",
+                                "Treat All" = "#CC79A7",
+                                "Treat None" = "#332288")) +
   scale_linetype_manual(values = c(
     "Model" = "solid",
     "Individual" = "dashed",
@@ -862,11 +1089,229 @@ dca(Died ~ `SpO2<80&Coma` + `SpO2<85&Coma` + `SpO2<90&Coma`,
   )) +
   theme(legend.title = element_blank()) +
   annotate("rect",
-           xmin = 0, xmax = 0.2,   # x-range to shade
+           xmin = 0.05, xmax = 0.2,   # x-range to shade
            ymin = -Inf, ymax = Inf,  # entire y-axis
-           alpha = 0.2, fill = "darkgrey")
+           alpha = 0.2, fill = "lightblue")
 
+#Decision curve analysis for male
+mal = dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO2<90_OR_Coma`, 
+          data = simpen_combine_before %>%
+            filter(child_sex == "Female"),
+          thresholds = seq(0, 0.4, 0.01)) %>%
+  as_tibble() %>%
+  dplyr::filter(!is.na(net_benefit)) %>%
+  mutate(cat = case_when(
+    label %in% c("sXGB", "sLR", "DT") ~ "Model",
+    !(label %in% c("sXGB", "sLR", "DT")) & !(label %in% c("Treat All", "Treat None")) ~ "Individual",
+    label %in% c("Treat All", "Treat None") ~ "Default"
+  )) %>%
+  ggplot(aes(x = threshold, y = net_benefit, color = label, linetype = cat)) +
+  stat_smooth(method = "loess", 
+              se = FALSE, 
+              formula = "y ~ x", 
+              span = 0.2) +
+  coord_cartesian(ylim = c(-0.01, 0.05774028)) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(x = "Threshold Probability", y = "Net Benefit", color = "labels") +
+  theme_bw() +
+  guides(linetype = "none") +
+  scale_color_manual(values = c("sXGB" = "#117733", 
+                                "sLR" = "#DDCC77",
+                                "DT" = "#D55E00",
+                                "SpO2<80_OR_Coma" = "#030303",
+                                "SpO2<85_OR_Coma" = "#888888",
+                                "SpO2<90_OR_Coma" = "#661100",
+                                "Treat All" = "#CC79A7",
+                                "Treat None" = "#332288")) +
+  scale_linetype_manual(values = c(
+    "Model" = "solid",
+    "Individual" = "dashed",
+    "Default" = "solid"
+  )) +
+  theme(legend.title = element_blank()) +
+  annotate("rect",
+           xmin = 0.05, xmax = 0.2,   # x-range to shade
+           ymin = -Inf, ymax = Inf,  # entire y-axis
+           alpha = 0.2, fill = "lightblue")
 
+###After recalibration###
+#Load as needed.
+load("XGB_after_onemodel.Rda", verbose = T) #For sXGB
+load("LR_after_onemodel.Rda", verbose = T) #For sLR
+load("DT_after_onemodel.Rda", verbose = T) #For DT
 
+for (i in c("Female", "Male")) {
+  print(i)
+  
+  dat = simpen %>%
+    filter(child_sex == i) %>%
+    mutate(Died = factor(Died, levels = c("0", "1"))) %>%
+    mutate(.pred_1 = .pred_1_recal, #In the recalibrated dataset, the recalibrated predicted probability and linear predictor has .pred_1_recal and raw_lp_recal as its name, respectively. 
+           raw_lp = raw_lp_recal) #They were both transformed so we could use existing coude without changing everything.
+  
+  #C-stat
+  c_se = sqrt(pROC::var(pROC::roc(dat$Died, dat$.pred_1)))
+  print("C-stat")
+  print(pROC::roc(dat$Died, dat$.pred_1)$auc)
+  print(pROC::roc(dat$Died, dat$.pred_1)$auc - 1.96 * c_se)
+  print(pROC::roc(dat$Died, dat$.pred_1)$auc + 1.96 * c_se)
+  
+  
+  
+  #Calibration slope
+  slope_pc <- glm(factor(Died, levels = c("0","1")) ~ raw_lp, 
+                  family = binomial, 
+                  data = dat)
+  
+  
+  print("CS")
+  print(coef(summary(slope_pc))[2,1])
+  print(coef(summary(slope_pc))[2,1] - 1.96 * coef(summary(slope_pc))[2,2])
+  print(coef(summary(slope_pc))[2,1] + 1.96 * coef(summary(slope_pc))[2,2])
+  
+  
+  #Calibration intercept
+  
+  intercept_pc <- glm(factor(Died, levels = c("0","1")) ~ 1, 
+                      offset = raw_lp, 
+                      family = binomial,
+                      data = dat)
+  
+  print("CI") 
+  print(coef(summary(slope_pc))[2,1])
+  print(coef(summary(slope_pc))[2,1] - 1.96 * coef(summary(slope_pc))[2,2])
+  print(coef(summary(slope_pc))[2,1] + 1.96 * coef(summary(slope_pc))[2,2])
+  
+  #O/E ratio
+  dat = dat %>%
+    mutate(mult = .pred_1*(1-.pred_1))
+  
+  O = sum(as.numeric(as.character(dat$Died)))
+  E = sum(dat$.pred_1)
+  O_E = O/E
+  mult = sum(dat$mult)
+  sd = (1/E) * sqrt(mult)
+  
+  
+  print("O/E")
+  print(O_E)
+  print(O_E - 1.96*sd)
+  print(O_E + 1.96*sd)
+  
+}
+
+#Brier Class for female
+simpen %>%
+  filter(child_sex == "Female") %>%
+  mutate(Died = factor(Died, levels = c("1", "0"))) %>%
+  brier_class(Died, .pred_1_recal)
+
+#Brier Class for male
+simpen %>%
+  filter(child_sex == "Male") %>%
+  mutate(Died = factor(Died, levels = c("1", "0"))) %>%
+  brier_class(Died, .pred_1_recal)
+
+#Compiling all the results for decision curve analysis
+load("XGB_after_onemodel.Rda", verbose = T)
+simpen_combine_after = simpen
+
+load("LR_after_onemodel.Rda", verbose = T)
+simpen_combine_after = simpen_combine_after %>%
+  mutate(sLR = simpen$.pred_1_recal)
+
+load("DT_after_onemodel.Rda", verbose = T)
+simpen_combine_after = simpen_combine_after %>%
+  mutate(DT = simpen$.pred_1_recal)
+
+simpen_combine_after = simpen_combine_after %>%
+  rename(c(sXGB = ".pred_1_recal"))
+
+simpen_combine_after = simpen_combine_after %>%
+  mutate(`SpO2<80_OR_Coma` = if_else(Q52SP02P < 80 | Q45COMA2 == 1, 1, 0),
+         `SpO2<85_OR_Coma` = if_else(Q52SP02P < 85 | Q45COMA2 == 1, 1, 0),
+         `SpO2<90_OR_Coma` = if_else(Q52SP02P < 90 | Q45COMA2 == 1, 1, 0))
+
+#Decision curve analysis for female
+fem2 = dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO2<90_OR_Coma`, 
+           data = simpen_combine_after %>%
+             filter(child_sex == "Female"),
+           thresholds = seq(0, 0.4, 0.01)) %>%
+  as_tibble() %>%
+  dplyr::filter(!is.na(net_benefit)) %>%
+  mutate(cat = case_when(
+    label %in% c("sXGB", "sLR", "DT") ~ "Model",
+    !(label %in% c("sXGB", "sLR", "DT")) & !(label %in% c("Treat All", "Treat None")) ~ "Individual",
+    label %in% c("Treat All", "Treat None") ~ "Default"
+  )) %>%
+  ggplot(aes(x = threshold, y = net_benefit, color = label, linetype = cat)) +
+  stat_smooth(method = "loess", 
+              se = FALSE, 
+              formula = "y ~ x", 
+              span = 0.2) +
+  coord_cartesian(ylim = c(-0.01, 0.05774028)) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(x = "Threshold Probability", y = "Net Benefit", color = "labels") +
+  theme_bw() +
+  guides(linetype = "none") +
+  scale_color_manual(values = c("sXGB" = "#117733", 
+                                "sLR" = "#DDCC77",
+                                "DT" = "#D55E00",
+                                "SpO2<80_OR_Coma" = "#030303",
+                                "SpO2<85_OR_Coma" = "#888888",
+                                "SpO2<90_OR_Coma" = "#661100",
+                                "Treat All" = "#CC79A7",
+                                "Treat None" = "#332288")) +
+  scale_linetype_manual(values = c(
+    "Model" = "solid",
+    "Individual" = "dashed",
+    "Default" = "solid"
+  )) +
+  theme(legend.title = element_blank()) +
+  annotate("rect",
+           xmin = 0.05, xmax = 0.2,   # x-range to shade
+           ymin = -Inf, ymax = Inf,  # entire y-axis
+           alpha = 0.2, fill = "lightblue")
+
+#Decision curve analysis for male
+mal2 = dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO2<90_OR_Coma`, 
+           data = simpen_combine_after %>%
+             filter(child_sex == "Male"),
+           thresholds = seq(0, 0.4, 0.01)) %>%
+  as_tibble() %>%
+  dplyr::filter(!is.na(net_benefit)) %>%
+  mutate(cat = case_when(
+    label %in% c("sXGB", "sLR", "DT") ~ "Model",
+    !(label %in% c("sXGB", "sLR", "DT")) & !(label %in% c("Treat All", "Treat None")) ~ "Individual",
+    label %in% c("Treat All", "Treat None") ~ "Default"
+  )) %>%
+  ggplot(aes(x = threshold, y = net_benefit, color = label, linetype = cat)) +
+  stat_smooth(method = "loess", 
+              se = FALSE, 
+              formula = "y ~ x", 
+              span = 0.2) +
+  coord_cartesian(ylim = c(-0.01, 0.05774028)) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(x = "Threshold Probability", y = "Net Benefit", color = "labels") +
+  theme_bw() +
+  guides(linetype = "none") +
+  scale_color_manual(values = c("sXGB" = "#117733", 
+                                "sLR" = "#DDCC77",
+                                "DT" = "#D55E00",
+                                "SpO2<80_OR_Coma" = "#030303",
+                                "SpO2<85_OR_Coma" = "#888888",
+                                "SpO2<90_OR_Coma" = "#661100",
+                                "Treat All" = "#CC79A7",
+                                "Treat None" = "#332288")) +
+  scale_linetype_manual(values = c(
+    "Model" = "solid",
+    "Individual" = "dashed",
+    "Default" = "solid"
+  )) +
+  theme(legend.title = element_blank()) +
+  annotate("rect",
+           xmin = 0.05, xmax = 0.2,   # x-range to shade
+           ymin = -Inf, ymax = Inf,  # entire y-axis
+           alpha = 0.2, fill = "lightblue")
 
 

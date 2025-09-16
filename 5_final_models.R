@@ -238,7 +238,7 @@ lasso_varimp = lasso_fit %>%
     Importance = abs(Importance),
     Variable = fct_reorder(Variable, Importance)
   ) %>%
-  ggplot(aes(x = Importance, y = Variable, fill = Sign)) +
+  ggplot(aes(x = Importance, y = Variable)) +
   geom_col() +
   scale_x_continuous(expand = c(0, 0)) +
   labs(y = NULL)
@@ -294,7 +294,7 @@ lasso_varimp = lasso_fit %>%
     Importance = abs(Importance),
     Variable = fct_reorder(Variable, Importance)
   ) %>%
-  ggplot(aes(x = Importance, y = Variable, fill = Sign)) +
+  ggplot(aes(x = Importance, y = Variable)) +
   geom_col() +
   scale_x_continuous(expand = c(0, 0)) +
   labs(y = NULL)
@@ -359,9 +359,7 @@ set.seed(1111)
 var_imp_xgb = xgb_fit %>%
   fit(data = final_data) %>%
   pull_workflow_fit() %>%
-  vip(geom = "point",
-      num_features = 32) +
-  labs(title = "XGBoost variable importance")
+  vip(num_features = 32) 
 
 
 ###########Final XGBoost after simplification###########
@@ -423,9 +421,7 @@ set.seed(1111)
 var_imp_xgb = xgb_fit %>%
   fit(data = final_data) %>%
   pull_workflow_fit() %>%
-  vip(geom = "point",
-      num_features = 32) +
-  labs(title = "XGBoost variable importance")
+  vip(num_features = 32) 
 
 
 ###########Final decision tree###########
@@ -474,10 +470,10 @@ tree_fit = fit(final_tree, data =  final_data)
 
 #Getting the variable importance
 var_imp_DT = tree_fit %>%
-  vip(geom = "col", aesthetics = list(fill = "midnightblue", alpha = 0.8), num_features = 32) +
-  scale_y_continuous(expand = c(0, 0)) +
-  labs(title = "DT Variable Importance")
+  vip(geom = "col", num_features = 32) +
+  scale_y_continuous(expand = c(0, 0)) 
 
+#Getting the decision tree plot
 rpart_plot = tree_fit %>%
   extract_fit_engine() %>%
   rpart.plot(extra = 104)
