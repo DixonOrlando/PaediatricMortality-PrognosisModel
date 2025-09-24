@@ -1,7 +1,5 @@
-//////////External Validation Sample size calculation for Lasso logistic regression//////////
+//////////External Validation Sample Size Calculation for Lasso Logistic Regression//////////
 
-
-///original parameter: 1111 -3.83 1.21 1.52 5.14
 
 clear all
 sknor 1000000 1111 -3.85 1.18 1.5 6 ///modified parameter value to use the available option for the function.
