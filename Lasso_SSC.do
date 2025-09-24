@@ -1,4 +1,4 @@
-//////////Sample size calculation for Lasso logistic regression//////////
+//////////External Validation Sample size calculation for Lasso logistic regression//////////
 
 
 ///original parameter: 1111 -3.83 1.21 1.52 5.14
