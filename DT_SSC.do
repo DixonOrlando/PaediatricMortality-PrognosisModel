@@ -1,7 +1,6 @@
-//////////External Validation Sample size calculation for XGBoost//////////
+//////////External Validation Sample Size Calculation for XGBoost//////////
 
 
-///original parameter: 1111 -3.83 1.21 1.52 5.14
 
 clear all
 sknor 1000000 1111 -3.59 0.57 2 15 ///modified parameter value to use the available option for the function.
