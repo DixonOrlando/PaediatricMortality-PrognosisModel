@@ -1214,9 +1214,11 @@ for (i in unique(final_child$cluster_code)) {
     if (j == 1) {
       boot_final = comb
     }
-    
-    boot_final = boot_final %>%
+
+    if (j != 1){
+      boot_final = boot_final %>%
       rbind(comb)
+      }
     
     if (j == 5) {
       boot_final = boot_final %>%
