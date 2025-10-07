@@ -250,9 +250,7 @@ final_data = final_child %>%
 
 child_rec <- recipe(Died ~ Q45COMA2 + Malnutrition + Q52SP02P + Q37RESPI2 + AdDxMAL + HRcat, data = final_data) %>%
   step_impute_bag(all_predictors()) %>%
-  step_poly(all_numeric_predictors(), degree = tune()) %>%
-  step_center(all_numeric_predictors(), -all_outcomes()) %>%
-  step_scale(all_numeric_predictors(), -all_outcomes(), factor = 2) %>%
+  step_poly(all_numeric_predictors(), degree = tune(), options = list(raw = TRUE)) %>%
   step_dummy(all_nominal(), -all_outcomes()) 
 
 wf <- workflow() %>%
@@ -262,7 +260,7 @@ set.seed(1111)
 child_boot <- vfold_cv(final_data, strata = Died, v = 5)
 
 tune_spec <- logistic_reg(penalty = tune(), mixture = 1) %>%
-  set_engine("glmnet", standardize = FALSE) 
+  set_engine("glmnet") 
 
 set.seed(1111)
 lambda_grid <- grid_random(penalty(), degree = degree_int(range = c(2, 4)), 
@@ -284,7 +282,6 @@ set.seed(1111)
 
 lasso_fit <- fit(final_lasso, data = final_data)
 
-#Getting the variable importance
 set.seed(1111)
 lasso_varimp = lasso_fit %>%
   fit(final_data) %>%
@@ -294,7 +291,7 @@ lasso_varimp = lasso_fit %>%
     Importance = abs(Importance),
     Variable = fct_reorder(Variable, Importance)
   ) %>%
-  ggplot(aes(x = Importance, y = Variable)) +
+  ggplot(aes(x = Importance, y = Variable, fill = Sign)) +
   geom_col() +
   scale_x_continuous(expand = c(0, 0)) +
   labs(y = NULL)

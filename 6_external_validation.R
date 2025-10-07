@@ -667,7 +667,7 @@ forest(metagen(TE = slo,
        rightlabs = c("Calibration slope", "95% CI", "Weight"),
        leftcols = c("studlab", "n.e", "n.c"),
        leftlabs = c("Hospital ID", "No. of deaths", "Sample Size"),
-       xlim = c(0.5,1.5))
+       xlim = c(0.5,1.3))
 
 #Forst plot for calibration intercept (can be used for both prior and after recalibration).
 forest(metagen(TE = int,
@@ -690,7 +690,7 @@ forest(metagen(TE = int,
        rightlabs = c("Calibration intercept", "95% CI", "Weight"),
        leftcols = c("studlab", "n.e", "n.c"),
        leftlabs = c("Hospital ID", "No. of deaths", "Sample Size"),
-       xlim = c(-0.5,0.5))
+       xlim = c(-1.5,1.5))
 
 #Forest plot for O/E ratio (this is for prior recalibration).
 O_E = simpen %>% 
@@ -790,10 +790,10 @@ simpen %>%
 ###Decision curve analysis###
 
 #Compiling all the results prior to recalibration for decision curve analysis
-load("simpen_xgb_EV_before.Rda", verbose = T) #Saved external validation results for simplified XGBoost (sXGB)
+load("XGB_after_onemodel.Rda", verbose = T) #Saved external validation results for simplified XGBoost (sXGB)
 simpen_combine_before = simpen
 
-load("simpen_LR_EV_before.Rda") #Saved external validation results for simplified lasso logistic regression (sLR)
+load("LR_EV_simpen_after_simple.Rda") #Saved external validation results for simplified lasso logistic regression (sLR)
 simpen_combine_before = simpen_combine_before %>%
   mutate(sLR = simpen$.pred_1)
 
@@ -854,7 +854,7 @@ dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO2<90_OR
 load("XGB_after_onemodel.Rda", verbose = T) #Saved external validation results for simplified XGBoost (sXGB)
 simpen_combine_after = simpen
 
-load("LR_after_onemodel.Rda", verbose = T) #Saved external validation results for simplified lasso logistic regression (sLR)
+load("LR_EV_simpen_after_simple.Rda", verbose = T) #Saved external validation results for simplified lasso logistic regression (sLR)
 simpen_combine_after = simpen_combine_after %>%
   mutate(sLR = simpen$.pred_1_recal)
 
@@ -958,7 +958,7 @@ dca(Died ~ `SpO2<80` + `SpO2<85` + `SpO2<90`,
 ###Prior recalibration###
 #Load as needed
 load("simpen_xgb_EV_before.Rda", verbose = T) #For sXGBoost
-load("simpen_LR_EV_before.Rda", verbose = T) #For sLR
+load("LR_EV_simpen_after_simple.Rda", verbose = T) #For sLR
 load("simpen_DT_EV_before.Rda", verbose = T) #For DT
 
 #This loop would print out the C-statistic, calibration slope, calibration intercept, and O/E ratio for each subgroup.
@@ -1033,10 +1033,10 @@ simpen %>%
   brier_class(Died, .pred_1)
 
 #Compiling all the results for decision curve analysis
-load("simpen_xgb_EV_before.Rda", verbose = T) #sXGB
+load("XGB_after_onemodel.Rda", verbose = T) #sXGB
 simpen_combine_before = simpen
 
-load("simpen_LR_EV_before.Rda") #sLR
+load("LR_EV_simpen_after_simple.Rda") #sLR
 simpen_combine_before = simpen_combine_before %>%
   mutate(sLR = simpen$.pred_1)
 
@@ -1137,7 +1137,7 @@ mal = dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO2
 ###After recalibration###
 #Load as needed.
 load("XGB_after_onemodel.Rda", verbose = T) #For sXGB
-load("LR_after_onemodel.Rda", verbose = T) #For sLR
+load("LR_EV_simpen_after_simple.Rda", verbose = T) #For sLR
 load("DT_after_onemodel.Rda", verbose = T) #For DT
 
 for (i in c("Female", "Male")) {
@@ -1216,7 +1216,7 @@ simpen %>%
 load("XGB_after_onemodel.Rda", verbose = T)
 simpen_combine_after = simpen
 
-load("LR_after_onemodel.Rda", verbose = T)
+load("LR_EV_simpen_after_simple.Rda", verbose = T)
 simpen_combine_after = simpen_combine_after %>%
   mutate(sLR = simpen$.pred_1_recal)
 
@@ -1314,4 +1314,4 @@ mal2 = dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO
            ymin = -Inf, ymax = Inf,  # entire y-axis
            alpha = 0.2, fill = "lightblue")
 
-
+ggarrange(fem, mal, fem2, mal2, nrow = 2, ncol = 2, common.legend = T) #Combine decision curves.
