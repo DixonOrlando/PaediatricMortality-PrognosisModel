@@ -1096,7 +1096,7 @@ fem = dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO2
 #Decision curve analysis for male
 mal = dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO2<90_OR_Coma`, 
           data = simpen_combine_before %>%
-            filter(child_sex == "Female"),
+            filter(child_sex == "Male"),
           thresholds = seq(0, 0.4, 0.01)) %>%
   as_tibble() %>%
   dplyr::filter(!is.na(net_benefit)) %>%
@@ -1147,7 +1147,7 @@ for (i in c("Female", "Male")) {
     filter(child_sex == i) %>%
     mutate(Died = factor(Died, levels = c("0", "1"))) %>%
     mutate(.pred_1 = .pred_1_recal, #In the recalibrated dataset, the recalibrated predicted probability and linear predictor has .pred_1_recal and raw_lp_recal as its name, respectively. 
-           raw_lp = raw_lp_recal) #They were both transformed so we could use existing coude without changing everything.
+           raw_lp = raw_lp_recal) #They were both transformed so we could use existing code without changing everything.
   
   #C-stat
   c_se = sqrt(pROC::var(pROC::roc(dat$Died, dat$.pred_1)))
