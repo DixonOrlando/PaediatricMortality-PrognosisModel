@@ -474,21 +474,22 @@ fem = dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO2
             mutate(Died = factor(Died, levels = c("0", "1"))) %>%
             filter(Q12SEX == "0"),
           thresholds = seq(0, 0.4, 0.01)) %>%
+  standardized_net_benefit() %>%
   as_tibble() %>%
-  dplyr::filter(!is.na(net_benefit)) %>%
+  dplyr::filter(!is.na(standardized_net_benefit)) %>%
   mutate(cat = case_when(
     label %in% c("sXGB", "sLR", "DT") ~ "Model",
     !(label %in% c("sXGB", "sLR", "DT")) & !(label %in% c("Treat All", "Treat None")) ~ "Individual",
     label %in% c("Treat All", "Treat None") ~ "Default"
   )) %>%
-  ggplot(aes(x = threshold, y = net_benefit, color = label, linetype = cat)) +
+  ggplot(aes(x = threshold, y = standardized_net_benefit, color = label, linetype = cat)) +
   stat_smooth(method = "loess", 
               se = FALSE, 
               formula = "y ~ x", 
               span = 0.2) +
-  coord_cartesian(ylim = c(-0.01, 0.04)) +
+  coord_cartesian(ylim = c(-0.01, 1)) +
   scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
-  labs(x = "Threshold Probability", y = "Net Benefit", color = "labels") +
+  labs(x = "Threshold Probability", y = "Standardized Net Benefit", color = "labels") +
   theme_bw() +
   guides(linetype = "none") +
   scale_color_manual(values = c("sXGB" = "#117733", 
@@ -516,21 +517,22 @@ mal = dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO2
             mutate(Died = factor(Died, levels = c("0", "1"))) %>%
             filter(Q12SEX == "1"),
           thresholds = seq(0, 0.4, 0.01)) %>%
+  standardized_net_benefit() %>%
   as_tibble() %>%
-  dplyr::filter(!is.na(net_benefit)) %>%
+  dplyr::filter(!is.na(standardized_net_benefit)) %>%
   mutate(cat = case_when(
     label %in% c("sXGB", "sLR", "DT") ~ "Model",
     !(label %in% c("sXGB", "sLR", "DT")) & !(label %in% c("Treat All", "Treat None")) ~ "Individual",
     label %in% c("Treat All", "Treat None") ~ "Default"
   )) %>%
-  ggplot(aes(x = threshold, y = net_benefit, color = label, linetype = cat)) +
+  ggplot(aes(x = threshold, y = standardized_net_benefit, color = label, linetype = cat)) +
   stat_smooth(method = "loess", 
               se = FALSE, 
               formula = "y ~ x", 
               span = 0.2) +
-  coord_cartesian(ylim = c(-0.01, 0.04)) +
+  coord_cartesian(ylim = c(-0.01, 1)) +
   scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
-  labs(x = "Threshold Probability", y = "Net Benefit", color = "labels") +
+  labs(x = "Threshold Probability", y = "Standardized Net Benefit", color = "labels") +
   theme_bw() +
   guides(linetype = "none") +
   scale_color_manual(values = c("sXGB" = "#117733", 

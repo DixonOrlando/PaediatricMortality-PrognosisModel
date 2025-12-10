@@ -268,6 +268,10 @@ final_kenya = final_kenya_data %>%
          Died = factor(Died, levels = c("0", "1"))) %>%
   mutate(AdDxMAL = factor(as.character(AdDxMAL), levels = c("0", "1", "2"))) 
 
+#De-identify facilities
+final_kenya = final_kenya %>%
+  mutate(hosp_id = factor(as.numeric(hosp_id)))
+
 
 ######Perfoming case-mix check######
 
@@ -308,8 +312,7 @@ pROC::roc(pred_res$membership, pred_res$.fitted)$auc
 ######Performing external validation for lasso logistic regression######
 
 #Load the model
-mod_bundle <- readRDS("final_LR_bundle.rds")
-lasso_fit <- bundle::unbundle(mod_bundle)
+load("modified_lasso_fit_baggedtree_simpleformula.Rda", verbose = T)
 
 store = data.frame(auc = 1, se = 1, slo = 1, slo_se = 1, int = 1, int_se=1,  cluster = "A")
 row = 1
@@ -328,11 +331,11 @@ for (i in unique(final_kenya$hosp_id)) {
   lasso_val <- lasso_val %>%
     mutate(raw_lp = log(.pred_1/(1-.pred_1)))
   
-  if (i == "Kiambu Level 5 Hospital") {
+  if (i == "8") {
     simpen = lasso_val
   }
   
-  if (i != "Kiambu Level 5 Hospital") {
+  if (i != "8") {
     simpen = simpen %>%
       rbind(lasso_val)
   }
@@ -421,11 +424,11 @@ for (i in unique(final_kenya$hosp_id)) {
   xgb_val <- xgb_val %>%
     mutate(raw_lp = log(.pred_1/(1-.pred_1)))
   
-  if (i == "Kiambu Level 5 Hospital") {
+  if (i == "8") {
     simpen = xgb_val
   }
   
-  if (i != "Kiambu Level 5 Hospital") {
+  if (i != "8") {
     simpen = simpen %>%
       rbind(xgb_val)
   }
@@ -546,11 +549,11 @@ for (i in unique(final_kenya$hosp_id)) {
   tree_val <- tree_val %>%
     mutate(raw_lp = log(.pred_1/(1-.pred_1)))
   
-  if (i == "Kiambu Level 5 Hospital") {
+  if (i == "8") {
     simpen = tree_val
   }
   
-  if (i != "Kiambu Level 5 Hospital") {
+  if (i != "8") {
     simpen = simpen %>%
       rbind(tree_val)
   }
@@ -623,6 +626,11 @@ for (i in unique(final_kenya$hosp_id)) {
 
 fk = final_kenya 
 
+store = store %>%
+  mutate(cluster = as.numeric(cluster)) %>%
+  arrange(cluster) %>%
+  mutate(cluster = factor(cluster))
+
 #Forest plot for C-statistic (can be used for both prior and after recalibration).
 forest(metagen(TE = auc,
                seTE = se,
@@ -644,7 +652,7 @@ forest(metagen(TE = auc,
        rightlabs = c("C-statistic", "95% CI", "Weight"),
        leftcols = c("studlab", "n.e", "n.c"),
        leftlabs = c("Hospital ID", "No. of deaths", "Sample Size"),
-       xlim = c(0.6,0.9))
+       xlim = c(0.5,0.8))
 
 #Forest plot for calibration slop (can be used for both prior and after recalibration).
 forest(metagen(TE = slo,
@@ -667,7 +675,7 @@ forest(metagen(TE = slo,
        rightlabs = c("Calibration slope", "95% CI", "Weight"),
        leftcols = c("studlab", "n.e", "n.c"),
        leftlabs = c("Hospital ID", "No. of deaths", "Sample Size"),
-       xlim = c(0.5,1.3))
+       xlim = c(0.5,1.7))
 
 #Forst plot for calibration intercept (can be used for both prior and after recalibration).
 forest(metagen(TE = int,
@@ -690,7 +698,7 @@ forest(metagen(TE = int,
        rightlabs = c("Calibration intercept", "95% CI", "Weight"),
        leftcols = c("studlab", "n.e", "n.c"),
        leftlabs = c("Hospital ID", "No. of deaths", "Sample Size"),
-       xlim = c(-1.5,1.5))
+       xlim = c(-1.3,1.3))
 
 #Forest plot for O/E ratio (this is for prior recalibration).
 O_E = simpen %>% 
@@ -731,7 +739,7 @@ forest(metagen(TE = O_E,
        leftcols = c("studlab", "n.e", "n.c"),
        leftlabs = c("Hospital ID", "No. of deaths", "Sample Size"),
        ref = 1,
-       xlim = c(0, 2))
+       xlim = c(0.5, 2.5))
 
 #Forest plot for O/E ratio (this is for after recalibration).
 O_E = simpen %>% 
@@ -1057,21 +1065,22 @@ fem = dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO2
           data = simpen_combine_before %>%
             filter(child_sex == "Female"),
           thresholds = seq(0, 0.4, 0.01)) %>%
+  standardized_net_benefit() %>%
   as_tibble() %>%
-  dplyr::filter(!is.na(net_benefit)) %>%
+  dplyr::filter(!is.na(standardized_net_benefit)) %>%
   mutate(cat = case_when(
     label %in% c("sXGB", "sLR", "DT") ~ "Model",
     !(label %in% c("sXGB", "sLR", "DT")) & !(label %in% c("Treat All", "Treat None")) ~ "Individual",
     label %in% c("Treat All", "Treat None") ~ "Default"
   )) %>%
-  ggplot(aes(x = threshold, y = net_benefit, color = label, linetype = cat)) +
+  ggplot(aes(x = threshold, y = standardized_net_benefit, color = label, linetype = cat)) +
   stat_smooth(method = "loess", 
               se = FALSE, 
               formula = "y ~ x", 
               span = 0.2) +
-  coord_cartesian(ylim = c(-0.01, 0.05774028)) +
+  coord_cartesian(ylim = c(-0.01, 1)) +
   scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
-  labs(x = "Threshold Probability", y = "Net Benefit", color = "labels") +
+  labs(x = "Threshold Probability", y = "Standardized Net Benefit", color = "labels") +
   theme_bw() +
   guides(linetype = "none") +
   scale_color_manual(values = c("sXGB" = "#117733", 
@@ -1098,21 +1107,22 @@ mal = dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO2
           data = simpen_combine_before %>%
             filter(child_sex == "Male"),
           thresholds = seq(0, 0.4, 0.01)) %>%
+  standardized_net_benefit() %>%
   as_tibble() %>%
-  dplyr::filter(!is.na(net_benefit)) %>%
+  dplyr::filter(!is.na(standardized_net_benefit)) %>%
   mutate(cat = case_when(
     label %in% c("sXGB", "sLR", "DT") ~ "Model",
     !(label %in% c("sXGB", "sLR", "DT")) & !(label %in% c("Treat All", "Treat None")) ~ "Individual",
     label %in% c("Treat All", "Treat None") ~ "Default"
   )) %>%
-  ggplot(aes(x = threshold, y = net_benefit, color = label, linetype = cat)) +
+  ggplot(aes(x = threshold, y = standardized_net_benefit, color = label, linetype = cat)) +
   stat_smooth(method = "loess", 
               se = FALSE, 
               formula = "y ~ x", 
               span = 0.2) +
-  coord_cartesian(ylim = c(-0.01, 0.05774028)) +
+  coord_cartesian(ylim = c(-0.01, 1)) +
   scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
-  labs(x = "Threshold Probability", y = "Net Benefit", color = "labels") +
+  labs(x = "Threshold Probability", y = "Standardized Net Benefit", color = "labels") +
   theme_bw() +
   guides(linetype = "none") +
   scale_color_manual(values = c("sXGB" = "#117733", 
@@ -1147,7 +1157,7 @@ for (i in c("Female", "Male")) {
     filter(child_sex == i) %>%
     mutate(Died = factor(Died, levels = c("0", "1"))) %>%
     mutate(.pred_1 = .pred_1_recal, #In the recalibrated dataset, the recalibrated predicted probability and linear predictor has .pred_1_recal and raw_lp_recal as its name, respectively. 
-           raw_lp = raw_lp_recal) #They were both transformed so we could use existing code without changing everything.
+           raw_lp = raw_lp_recal) #They were both transformed so we could use existing coude without changing everything.
   
   #C-stat
   c_se = sqrt(pROC::var(pROC::roc(dat$Died, dat$.pred_1)))
@@ -1237,21 +1247,22 @@ fem2 = dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO
            data = simpen_combine_after %>%
              filter(child_sex == "Female"),
            thresholds = seq(0, 0.4, 0.01)) %>%
+  standardized_net_benefit() %>%
   as_tibble() %>%
-  dplyr::filter(!is.na(net_benefit)) %>%
+  dplyr::filter(!is.na(standardized_net_benefit)) %>%
   mutate(cat = case_when(
     label %in% c("sXGB", "sLR", "DT") ~ "Model",
     !(label %in% c("sXGB", "sLR", "DT")) & !(label %in% c("Treat All", "Treat None")) ~ "Individual",
     label %in% c("Treat All", "Treat None") ~ "Default"
   )) %>%
-  ggplot(aes(x = threshold, y = net_benefit, color = label, linetype = cat)) +
+  ggplot(aes(x = threshold, y = standardized_net_benefit, color = label, linetype = cat)) +
   stat_smooth(method = "loess", 
               se = FALSE, 
               formula = "y ~ x", 
               span = 0.2) +
-  coord_cartesian(ylim = c(-0.01, 0.05774028)) +
+  coord_cartesian(ylim = c(-0.01, 1)) +
   scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
-  labs(x = "Threshold Probability", y = "Net Benefit", color = "labels") +
+  labs(x = "Threshold Probability", y = "Standardized Net Benefit", color = "labels") +
   theme_bw() +
   guides(linetype = "none") +
   scale_color_manual(values = c("sXGB" = "#117733", 
@@ -1278,21 +1289,22 @@ mal2 = dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO
            data = simpen_combine_after %>%
              filter(child_sex == "Male"),
            thresholds = seq(0, 0.4, 0.01)) %>%
+  standardized_net_benefit() %>%
   as_tibble() %>%
-  dplyr::filter(!is.na(net_benefit)) %>%
+  dplyr::filter(!is.na(standardized_net_benefit)) %>%
   mutate(cat = case_when(
     label %in% c("sXGB", "sLR", "DT") ~ "Model",
     !(label %in% c("sXGB", "sLR", "DT")) & !(label %in% c("Treat All", "Treat None")) ~ "Individual",
     label %in% c("Treat All", "Treat None") ~ "Default"
   )) %>%
-  ggplot(aes(x = threshold, y = net_benefit, color = label, linetype = cat)) +
+  ggplot(aes(x = threshold, y = standardized_net_benefit, color = label, linetype = cat)) +
   stat_smooth(method = "loess", 
               se = FALSE, 
               formula = "y ~ x", 
               span = 0.2) +
-  coord_cartesian(ylim = c(-0.01, 0.05774028)) +
+  coord_cartesian(ylim = c(-0.01, 1)) +
   scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
-  labs(x = "Threshold Probability", y = "Net Benefit", color = "labels") +
+  labs(x = "Threshold Probability", y = "Standardized Net Benefit", color = "labels") +
   theme_bw() +
   guides(linetype = "none") +
   scale_color_manual(values = c("sXGB" = "#117733", 
