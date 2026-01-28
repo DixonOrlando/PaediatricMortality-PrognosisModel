@@ -407,9 +407,9 @@ for (i in c("0", "1")) {
                       data = dat)
   
   print("CI") 
-  print(coef(summary(slope_pc))[2,1])
-  print(coef(summary(slope_pc))[2,1] - 1.96 * coef(summary(slope_pc))[2,2])
-  print(coef(summary(slope_pc))[2,1] + 1.96 * coef(summary(slope_pc))[2,2])
+  print(coef(summary(intercept_pc))[1,1])
+  print(coef(summary(intercept_pc))[1,1] - 1.96 * coef(summary(intercept_pc))[1,2])
+  print(coef(summary(intercept_pc))[1,1] + 1.96 * coef(summary(intercept_pc))[1,2])
   
   #O/E ratio
   dat = dat %>%
@@ -553,4 +553,5 @@ mal = dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO2
            xmin = 0.05, xmax = 0.2,   # x-range to shade
            ymin = -Inf, ymax = Inf,  # entire y-axis
            alpha = 0.2, fill = "lightblue")
+
 
