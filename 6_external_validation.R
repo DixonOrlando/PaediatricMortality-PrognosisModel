@@ -1006,9 +1006,9 @@ for (i in c("Female", "Male")) {
                       data = dat)
   
   print("CI") 
-  print(coef(summary(slope_pc))[2,1])
-  print(coef(summary(slope_pc))[2,1] - 1.96 * coef(summary(slope_pc))[2,2])
-  print(coef(summary(slope_pc))[2,1] + 1.96 * coef(summary(slope_pc))[2,2])
+  print(coef(summary(intercept_pc))[1,1])
+  print(coef(summary(intercept_pc))[1,1] - 1.96 * coef(summary(intercept_pc))[1,2])
+  print(coef(summary(intercept_pc))[1,1] + 1.96 * coef(summary(intercept_pc))[1,2])
   
   #O/E ratio
   dat = dat %>%
@@ -1188,9 +1188,9 @@ for (i in c("Female", "Male")) {
                       data = dat)
   
   print("CI") 
-  print(coef(summary(slope_pc))[2,1])
-  print(coef(summary(slope_pc))[2,1] - 1.96 * coef(summary(slope_pc))[2,2])
-  print(coef(summary(slope_pc))[2,1] + 1.96 * coef(summary(slope_pc))[2,2])
+  print(coef(summary(intercept_pc))[1,1])
+  print(coef(summary(intercept_pc))[1,1] - 1.96 * coef(summary(intercept_pc))[1,2])
+  print(coef(summary(intercept_pc))[1,1] + 1.96 * coef(summary(intercept_pc))[1,2])
   
   #O/E ratio
   dat = dat %>%
@@ -1327,3 +1327,4 @@ mal2 = dca(Died ~ sXGB + sLR + DT + `SpO2<80_OR_Coma` + `SpO2<85_OR_Coma` + `SpO
            alpha = 0.2, fill = "lightblue")
 
 ggarrange(fem, mal, fem2, mal2, nrow = 2, ncol = 2, common.legend = T) #Combine decision curves.
+
